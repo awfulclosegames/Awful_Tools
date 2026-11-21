@@ -1,0 +1,83 @@
+<UserControl x:Class="AwfulDiff.Controls.HexInspector"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource BgSurface}"
+             Foreground="{DynamicResource TextPrimary}"
+             FontFamily="Consolas, JetBrains Mono, Monaco, monospace"
+             FontSize="12"
+             Padding="8,4">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="8"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="8"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left Panel Value Display -->
+        <ScrollViewer Grid.Column="0"
+                      VerticalScrollBarVisibility="Auto"
+                      Background="{DynamicResource BgDeep}"
+                      BorderBrush="{DynamicResource BorderSubtle}"
+                      BorderThickness="1"
+                      Padding="8,4">
+            <Border CornerRadius="3" Background="{DynamicResource BgDeep}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1">
+                <TextBlock x:Name="LeftValuesText"
+                           Foreground="{DynamicResource TextSecondary}"
+                           TextWrapping="NoWrap"/>
+            </Border>
+        </ScrollViewer>
+
+        <!-- Center Type Selector (+ insert button when the right panel is editable) -->
+        <StackPanel Grid.Column="2" VerticalAlignment="Top" Margin="0,4">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <TextBlock Text="Type:"
+                       Foreground="{DynamicResource TextSecondary}"
+                       FontSize="11"
+                       VerticalAlignment="Center"
+                       Margin="0,0,6,0"/>
+            <ComboBox x:Name="TypeSelector"
+                      Style="{DynamicResource ThemedComboBoxStyle}"
+                      Width="140"
+                      Height="24"/>
+            <Button x:Name="ManageStructsButton"
+                    Content="⚙ structs…"
+                    Width="92"
+                    Height="24"
+                    Margin="6,0,0,0"
+                    FontSize="11"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource BgDeep}"
+                    Foreground="{DynamicResource TextPrimary}"
+                    BorderBrush="{DynamicResource BorderGlowDim}"
+                    Click="ManageStructsButton_Click"/>
+            </StackPanel>
+            <Button x:Name="InsertButton"
+                    Content="⊕ insert"
+                    Width="120"
+                    Height="22"
+                    Margin="0,6,0,0"
+                    HorizontalAlignment="Center"
+                    FontSize="11"
+                    Visibility="Collapsed"
+                    Background="{DynamicResource BgDeep}"
+                    Foreground="{DynamicResource TextPrimary}"
+                    BorderBrush="{DynamicResource BorderGlowDim}"
+                    Click="InsertButton_Click"/>
+        </StackPanel>
+
+        <!-- Right Panel Value Display (editable rows when "edit right" is enabled) -->
+        <ScrollViewer Grid.Column="4"
+                      VerticalScrollBarVisibility="Auto"
+                      Background="{DynamicResource BgDeep}"
+                      BorderBrush="{DynamicResource BorderSubtle}"
+                      BorderThickness="1"
+                      Padding="8,4">
+            <Border CornerRadius="3" Background="{DynamicResource BgDeep}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1">
+                <StackPanel x:Name="RightValuesPanel"/>
+            </Border>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

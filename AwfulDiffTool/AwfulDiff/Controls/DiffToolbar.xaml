@@ -1,0 +1,244 @@
+<UserControl x:Class="AwfulDiff.Controls.DiffToolbar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+
+    <!-- Outer container -->
+    <Grid>
+        <Border Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlow}"
+                BorderThickness="0,0,0,1"
+                Padding="8,4">
+            <!-- Subtle glow line -->
+            <Border.OpacityMask>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#00E5FF" Offset="0"/>
+                    <GradientStop Color="#B040FF" Offset="0.5"/>
+                    <GradientStop Color="#00E5FF" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.OpacityMask>
+        </Border>
+
+        <!-- Actual content overlay -->
+        <StackPanel Orientation="Horizontal">
+
+            <!-- File loading -->
+            <Button Content="[◈] Left File..."
+                    Style="{DynamicResource ToolbarButtonStyle}"
+                    Command="{Binding OpenLeftFileCommand}"/>
+            <Button Content="[◈] Right File..."
+                    Style="{DynamicResource ToolbarButtonStyle}"
+                    Command="{Binding OpenRightFileCommand}"/>
+
+            <Rectangle Fill="{DynamicResource BorderSubtle}" Width="1" Height="20" Margin="8,0"/>
+
+            <!-- Layout controls — MinWidth (not Width) keeps all three equal at the widest
+                 label's size ("[≡] Single" ≈ 75px in 12px Consolas); MinWidth so a font-metric
+                 surprise stretches the longest button rather than clipping it -->
+            <Button Content="[||] Side"
+                    Style="{DynamicResource LayoutSideBySideButtonStyle}"
+                    MinWidth="76"
+                    Command="{Binding ToggleLayoutCommand}"
+                    CommandParameter="SideBySide"/>
+            <Button Content="[=] Top"
+                    Style="{DynamicResource LayoutTopBottomButtonStyle}"
+                    MinWidth="76"
+                    Command="{Binding ToggleLayoutCommand}"
+                    CommandParameter="TopBottom"/>
+            <Button Content="[≡] Single"
+                    Style="{DynamicResource LayoutUnifiedButtonStyle}"
+                    MinWidth="76"
+                    Command="{Binding ToggleLayoutCommand}"
+                    CommandParameter="Unified"
+                    ToolTip="Single git-style panel: - deletions, + additions"/>
+
+            <Rectangle Fill="{DynamicResource BorderSubtle}" Width="1" Height="20" Margin="8,0"/>
+
+            <!-- Sync scroll / Show gaps toggles -->
+            <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                <CheckBox Content="&lt;-&gt; Sync Scroll"
+                          Style="{DynamicResource ToggleCheckBoxStyle}"
+                          IsChecked="{Binding SyncScroll}"/>
+                <CheckBox Content="[+] Show Gaps"
+                          Style="{DynamicResource ToggleCheckBoxStyle}"
+                          IsChecked="{Binding ShowGaps}"/>
+                <!-- Hex only: resyncs alignment after each change block (no positional cascade)
+                     and shades only the bytes that actually differ, not the whole Modified row -->
+                <CheckBox Content="▦ Per-Byte"
+                          Style="{DynamicResource ToggleCheckBoxStyle}"
+                          IsChecked="{Binding HexPerByte}"
+                          Visibility="{Binding IsHexView, Converter={StaticResource BoolToVis}}"
+                          ToolTip="Resync after each change block and highlight only the bytes that differ (hex view only)"/>
+            </StackPanel>
+
+            <Rectangle Fill="{DynamicResource BorderSubtle}" Width="1" Height="20" Margin="8,0"/>
+
+            <!-- Options -->
+            <Button Content="&lt;=&gt; Swap"
+                    Style="{DynamicResource ToolbarButtonStyle}"
+                    Command="{Binding SwapFilesCommand}"/>
+
+            <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                <!-- Text only — whitespace has no meaning for byte-level hex diffs -->
+                <CheckBox Content="~ Ignore Whitespace"
+                          Style="{DynamicResource ToggleCheckBoxStyle}"
+                          IsChecked="{Binding IgnoreWhitespace}"
+                          Visibility="{Binding IsTextView, Converter={StaticResource BoolToVis}}"/>
+                <CheckBox Content="◫ Inline Diffs"
+                          Style="{DynamicResource ToggleCheckBoxStyle}"
+                          IsChecked="{Binding ShowInlineDiffs}"/>
+                <!-- Text only — structural analysis works on line text, not bytes -->
+                <CheckBox Content="▤ Structure"
+                          Style="{DynamicResource ToggleCheckBoxStyle}"
+                          IsChecked="{Binding UseStructuralAnalysis}"
+                          Visibility="{Binding IsTextView, Converter={StaticResource BoolToVis}}"
+                          ToolTip="Highlight structural changes (functions, signatures, types, lambdas, loops, braces, JSON keys, XML elements) — C/C++, C#, Java, Rust, Python, JSON and XML files"/>
+                <CheckBox Content="@ Timestamp Mode"
+                          Style="{DynamicResource ToggleCheckBoxStyle}"
+                          IsChecked="{Binding TimestampMode}"/>
+            </StackPanel>
+
+            <Rectangle Fill="{DynamicResource BorderSubtle}" Width="1" Height="20" Margin="8,0"/>
+
+            <!-- View mode toggle -->
+            <Button Content="[Tx] Text"
+                    Style="{DynamicResource ViewModeTextButtonStyle}"
+                    Command="{Binding ToggleViewModeCommand}"/>
+            <Button Content="[Hx] Hex"
+                    Style="{DynamicResource ViewModeHexButtonStyle}"
+                    Command="{Binding ToggleViewModeCommand}"/>
+
+            <Rectangle Fill="{DynamicResource BorderSubtle}" Width="1" Height="20" Margin="8,0"/>
+
+            <!-- Refresh -->
+            <Button Content="[r] Refresh"
+                    Style="{DynamicResource ToolbarButtonStyle}"
+                    Command="{Binding RefreshCommand}"/>
+
+            <!-- Settings (styled distinctly from the action buttons) -->
+            <Button Content="⚙ Settings"
+                    Style="{DynamicResource SettingsButtonStyle}"
+                    Command="{Binding SettingsCommand}"
+                    ToolTip="Open settings (theme, font scale)"/>
+
+            <!-- Directory Diff -->
+            <Button Content="[▣] Directories..."
+                    Style="{DynamicResource ToolbarButtonStyle}"
+                    Click="DirectoriesButton_Click"
+                    ToolTip="Compare two directories recursively (Ctrl-click to compare the parent folders of the open files) — double-click a file to open it here"/>
+
+            <!-- 3-Way Merge (compact — secondary action, so it sits small next to Directories) -->
+            <Button Content="[⋔] 3-Merge..."
+                    Style="{DynamicResource ToolbarButtonStyle}"
+                    FontSize="10"
+                    Command="{Binding StartMergeCommand}"
+                    ToolTip="Merge two change files into a base file (Ctrl+M)"/>
+
+            <Rectangle Fill="{DynamicResource BorderSubtle}" Width="1" Height="20" Margin="8,0"/>
+
+            <!-- Sync Points (two-pane layouts only — the unified panel has no partner to anchor) -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0"
+                        Visibility="{Binding IsTwoPaneLayout, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="#"
+                           Foreground="{DynamicResource TextAccent}"
+                           FontWeight="Bold"
+                           FontSize="13"
+                           VerticalAlignment="Center"
+                           Margin="0,0,2,0"
+                           ToolTip="Right-click any line -> Set Sync Point to anchor alignment"/>
+                <TextBlock Text="{Binding SyncPointCount}"
+                           Foreground="{DynamicResource TextAccent}"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <Button Content="Clear All"
+                        Style="{DynamicResource ToolbarButtonStyle}"
+                        Command="{Binding ClearSyncPointsCommand}"
+                        Visibility="{Binding HasSyncPoints, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Remove all sync points"/>
+            </StackPanel>
+
+            <Rectangle Fill="{DynamicResource BorderSubtle}" Width="1" Height="20" Margin="8,0"/>
+
+            <!-- Save / Discard (visible only when right file has unsaved changes) -->
+            <StackPanel Orientation="Horizontal"
+                        Visibility="{Binding HasUnsavedChanges, Converter={StaticResource BoolToVis}}">
+                <ToggleButton x:Name="UnsavedMenuToggle"
+                              Content="! Unsaved Changes v">
+                    <ToggleButton.Style>
+                        <Style TargetType="ToggleButton">
+                            <Setter Property="Foreground" Value="{DynamicResource DiffModifiedBorder}"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Padding" Value="6,2"/>
+                            <Setter Property="Margin" Value="0,0,2,0"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="FontSize" Value="11"/>
+                            <Setter Property="FontFamily" Value="Consolas"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource TextAccent}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource TextAccent}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ToggleButton.Style>
+                </ToggleButton>
+                <Popup IsOpen="{Binding IsChecked, ElementName=UnsavedMenuToggle}"
+                       Placement="Bottom"
+                       PlacementTarget="{Binding ElementName=UnsavedMenuToggle}"
+                       StaysOpen="False">
+                    <Border Background="{DynamicResource BgPanel}"
+                            BorderBrush="{DynamicResource BorderSubtle}"
+                            BorderThickness="1"
+                            MinWidth="150">
+                        <StackPanel>
+                            <Button Content="> Save Right"
+                                    Style="{DynamicResource MenuItemButton}"
+                                    Command="{Binding SaveRightFileCommand}"/>
+                            <Button Content="> Save As..."
+                                    Style="{DynamicResource MenuItemButton}"
+                                    Command="{Binding SaveAsRightFileCommand}"/>
+                            <Rectangle Fill="{DynamicResource BorderSubtle}" Height="1" Margin="4,0"/>
+                            <Button Content="x Discard Changes"
+                                    Style="{DynamicResource MenuItemButton}"
+                                    Foreground="{DynamicResource DiffRemovedBorder}"
+                                    Command="{Binding DiscardChangesCommand}"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </StackPanel>
+
+            <!-- Spacer -->
+            <Rectangle HorizontalAlignment="Stretch"/>
+
+            <!-- Legend with swatches -->
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="8,0">
+                <Border Width="12" Height="12" Background="{DynamicResource DiffAddedBg}" BorderBrush="{DynamicResource DiffAddedBorder}" BorderThickness="1" CornerRadius="2" Margin="0,0,2,0"/>
+                <TextBlock Text="Added" Foreground="{DynamicResource TextDim}" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0" FontFamily="Consolas"/>
+                <Border Width="12" Height="12" Background="{DynamicResource DiffRemovedBg}" BorderBrush="{DynamicResource DiffRemovedBorder}" BorderThickness="1" CornerRadius="2" Margin="0,0,2,0"/>
+                <TextBlock Text="Removed" Foreground="{DynamicResource TextDim}" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0" FontFamily="Consolas"/>
+                <Border Width="12" Height="12" Background="{DynamicResource DiffModifiedBg}" BorderBrush="{DynamicResource DiffModifiedBorder}" BorderThickness="1" CornerRadius="2" Margin="0,0,2,0"/>
+                <TextBlock Text="Modified" Foreground="{DynamicResource TextDim}" FontSize="10" VerticalAlignment="Center" FontFamily="Consolas"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

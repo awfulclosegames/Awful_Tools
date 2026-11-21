@@ -1,0 +1,176 @@
+<!-- No AllowsTransparency: transparent windows maximize over the full monitor (under the
+     taskbar) instead of the work area. -->
+<Window x:Class="AwfulDiff.ManualWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="AwfulDiff // User Manual"
+        Width="980"
+        Height="720"
+        MinWidth="640"
+        MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource BgDeep}"
+        Foreground="{DynamicResource TextPrimary}"
+        FontFamily="{DynamicResource UiFont}"
+        FontSize="13">
+
+    <!-- Same borderless-chrome pattern as MainWindow: WindowChrome provides the resize hit-areas,
+         the custom 32px title bar handles drag / double-click maximize itself. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="5"
+                      CornerRadius="0"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- Index entry: transparent row, accent bar + highlight when selected; level-3
+             subsections get extra left padding so the hierarchy reads at a glance. -->
+        <Style x:Key="IndexItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BgPanel}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BgPanel}"/>
+                                <Setter TargetName="Bd" Property="BorderThickness" Value="2,0,0,0"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource TextAccent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Level}" Value="3">
+                    <Setter Property="Padding" Value="26,4"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Title bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Index + document -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Outer glow frame -->
+        <Border BorderBrush="{DynamicResource BorderGlowDim}" BorderThickness="1"/>
+
+        <!-- ===== CUSTOM TITLE BAR ===== -->
+        <Border x:Name="TitleBar"
+                Grid.Row="0"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlow}"
+                BorderThickness="0,0,0,1"
+                Height="32"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                MouseLeftButtonUp="TitleBar_MouseLeftButtonUp"
+                MouseMove="TitleBar_MouseMove">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Glow line at bottom edge -->
+                <Border Opacity="0.3" Background="{DynamicResource BorderGlow}" Height="1" VerticalAlignment="Bottom"/>
+
+                <!-- Left: branding + window title -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="◈"
+                               Foreground="{DynamicResource TextAccent}"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Margin="8,0,4,0"/>
+                    <TextBlock Text="AwfulDiff // User Manual"
+                               Foreground="{DynamicResource TextPrimary}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Right: window controls. IsHitTestVisibleInChrome keeps these clickable —
+                     otherwise the top/right resize bands would swallow presses on them. -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Stretch"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="BtnMinimize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="_"
+                            Click="BtnMinimize_Click"/>
+                    <Button x:Name="BtnMaximize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]"
+                            Click="BtnMaximize_Click"/>
+                    <Button x:Name="BtnRestore"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]/"
+                            Visibility="Collapsed"
+                            Click="BtnRestore_Click"/>
+                    <Button x:Name="BtnClose"
+                            Style="{DynamicResource WindowControlCloseButton}"
+                            Content="x"
+                            Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== CONTENT: section index | rendered manual ===== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: index bar for jumping between sections -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource BgSurface}"
+                    BorderBrush="{DynamicResource BorderSubtle}"
+                    BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="INDEX"
+                               Foreground="{DynamicResource TextDim}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Margin="12,10,0,6"/>
+                    <ListBox x:Name="LstIndex"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ItemContainerStyle="{StaticResource IndexItemStyle}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectionChanged="LstIndex_SelectionChanged"/>
+                </DockPanel>
+            </Border>
+
+            <!-- Right: the manual itself. Content is a StackPanel of TextBlocks/Grids built by
+                 ManualMarkdown — ordinary visuals, so section headings can be located with
+                 TranslatePoint for index navigation. Font/brush inheritance flows from this
+                 window into them, and SetResourceReference keeps it live on theme switch. -->
+            <ScrollViewer x:Name="DocViewer"
+                          Grid.Column="1"
+                          Background="{DynamicResource BgDeep}"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"/>
+        </Grid>
+    </Grid>
+</Window>

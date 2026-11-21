@@ -1,0 +1,22 @@
+<Project Sdk="WixToolset.Sdk/7.0.1">
+
+  <PropertyGroup>
+    <!-- Output file name: bin\<Configuration>\AwfulDiff.msi -->
+    <OutputName>AwfulDiff</OutputName>
+    <!-- The app is a win-x64 build; without this the SDK defaults the package to x86
+         (wix.targets), which ICE80 rejects for Bitness="always64" components. -->
+    <InstallerPlatform>x64</InstallerPlatform>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Standard MSI wizard UI (welcome / install dir / execute progress / finish). -->
+    <PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />
+  </ItemGroup>
+
+  <!-- Publish the app (README canonical command) before compiling the package so the
+       File Source below always points at a fresh single-file release build. -->
+  <Target Name="PublishApp" BeforeTargets="Build">
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AwfulDiff.csproj&quot; --configuration $(Configuration) --self-contained -r win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true" />
+  </Target>
+
+</Project>

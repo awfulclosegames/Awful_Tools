@@ -1,0 +1,403 @@
+<!-- No AllowsTransparency: transparent windows maximize over the full monitor (under the
+     taskbar) instead of the work area. -->
+<Window x:Class="AwfulDiff.ThreeWayMergeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="clr-namespace:AwfulDiff.Controls"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="AwfulDiff // 3-Way Merge"
+        Width="1400"
+        Height="850"
+        MinWidth="900"
+        MinHeight="500"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource BgDeep}"
+        Foreground="{DynamicResource TextPrimary}"
+        FontFamily="Consolas, JetBrains Mono, Monaco, monospace"
+        FontSize="13">
+
+    <!-- WindowChrome gives the borderless window proper resize hit-areas on all edges and
+         corners (without it, WPF only allows grabbing the bottom-right corner). CaptionHeight
+         is 0 because the custom title bar handles its own drag/double-click logic. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="5"
+                      CornerRadius="0"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Title bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Toolbar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Three panes -->
+            <RowDefinition Height="*"/>
+            <!-- Status bar -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Outer glow frame -->
+        <Border BorderBrush="{DynamicResource BorderGlowDim}" BorderThickness="1"/>
+
+        <!-- ===== CUSTOM TITLE BAR ===== -->
+        <Border x:Name="TitleBar"
+                Grid.Row="0"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlow}"
+                BorderThickness="0,0,0,1"
+                Height="32"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                MouseLeftButtonUp="TitleBar_MouseLeftButtonUp"
+                MouseMove="TitleBar_MouseMove">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Glow line at bottom edge -->
+                <Border Opacity="0.3" Background="{DynamicResource BorderGlow}" Height="1" VerticalAlignment="Bottom"/>
+
+                <!-- Left: App branding -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="◈"
+                               Foreground="{DynamicResource TextAccent}"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Margin="8,0,4,0"/>
+                    <TextBlock Text="AwfulDiff"
+                               Foreground="{DynamicResource TextAccent}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="3-Way Merge"
+                               Foreground="{DynamicResource TextDim}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Margin="0,0,4,0"/>
+                </StackPanel>
+
+                <!-- Right: Window controls. IsHitTestVisibleInChrome keeps these clickable —
+                     otherwise the top/right resize bands would swallow presses on them. -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Stretch"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="BtnMinimize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="_"
+                            Click="BtnMinimize_Click"/>
+                    <Button x:Name="BtnMaximize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]"
+                            Click="BtnMaximize_Click"/>
+                    <Button x:Name="BtnRestore"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]/"
+                            Visibility="Collapsed"
+                            Click="BtnRestore_Click"/>
+                    <Button x:Name="BtnClose"
+                            Style="{DynamicResource WindowControlCloseButton}"
+                            Content="x"
+                            Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== TOOLBAR ===== -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlowDim}"
+                BorderThickness="0,0,0,1">
+            <DockPanel Margin="4,0">
+
+                <!-- Left: conflict navigation -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="◀ Prev conflict (Ctrl+F3)"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            Command="{Binding PrevConflictCommand}"/>
+                    <Button Content="Next conflict (F3) ▶"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            Command="{Binding NextConflictCommand}"/>
+                    <TextBlock Text="{Binding UnresolvedCount, StringFormat={}{0} unresolved}"
+                               Foreground="{DynamicResource TextSecondary}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"/>
+                </StackPanel>
+
+                <!-- Right: legend + bulk actions + save -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <!-- Legend swatches -->
+                    <Border Width="12" Height="12" Margin="8,0,3,0" VerticalAlignment="Center"
+                            Background="{DynamicResource MergeChangeABg}"
+                            BorderBrush="{DynamicResource MergeChangeABorder}"
+                            BorderThickness="1"/>
+                    <TextBlock Text="File A" Foreground="{DynamicResource TextSecondary}" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                    <Border Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                            Background="{DynamicResource MergeChangeBBg}"
+                            BorderBrush="{DynamicResource MergeChangeBBorder}"
+                            BorderThickness="1"/>
+                    <TextBlock Text="File B" Foreground="{DynamicResource TextSecondary}" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                    <Border Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                            Background="{DynamicResource MergeConflictBg}"
+                            BorderBrush="{DynamicResource MergeConflictBorder}"
+                            BorderThickness="1"/>
+                    <TextBlock Text="Conflict" Foreground="{DynamicResource TextSecondary}" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                    <Border Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                            Background="{DynamicResource MergeConflictResolvedBg}"
+                            BorderBrush="{DynamicResource MergeConflictResolvedBorder}"
+                            BorderThickness="1"/>
+                    <TextBlock Text="Resolved" Foreground="{DynamicResource TextSecondary}" FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
+
+                    <Button Content="◀ Resolved"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            ToolTip="Previous resolved conflict (Ctrl+Shift+F3)"
+                            Command="{Binding PrevResolvedConflictCommand}"/>
+                    <Button Content="Resolved ▶"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            ToolTip="Next resolved conflict (Shift+F3)"
+                            Command="{Binding NextResolvedConflictCommand}"/>
+
+                    <Button Content="↺ Undo"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            ToolTip="Undo (Ctrl+Z)"
+                            Command="{Binding UndoCommand}"/>
+                    <Button Content="↻ Redo"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            ToolTip="Redo (Ctrl+Y or Ctrl+Shift+Z)"
+                            Command="{Binding RedoCommand}"/>
+
+                    <Button Content="Accept All"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            Command="{Binding AcceptAllCommand}"/>
+                    <Button Content="Reject All"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            Command="{Binding RejectAllCommand}"/>
+                    <Button Content="Save base (Ctrl+S)"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            Command="{Binding SaveCommand}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ===== THREE PANES: A | base | B ===== -->
+        <Grid Grid.Row="2" Background="{DynamicResource BgDeep}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- File A pane -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0"
+                        Background="{DynamicResource BgToolbar}"
+                        BorderBrush="{DynamicResource BorderGlowDim}"
+                        BorderThickness="0,1,0,0"
+                        Padding="8,4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="{Binding TitleA}"
+                                   Foreground="{DynamicResource MergeChangeABorder}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   FontFamily="Consolas"/>
+                        <TextBlock Grid.Row="1"
+                                   Text="{Binding MetaA}"
+                                   Foreground="{DynamicResource TextDim}"
+                                   FontSize="11"
+                                   FontFamily="Consolas"
+                                   Margin="0,1,0,0"/>
+                    </Grid>
+                </Border>
+                <ctrl:FastDiffViewer x:Name="ViewerA"
+                                     Grid.Row="1"
+                                     Margin="4,0,0,4"
+                                     Lines="{Binding LinesA}"
+                                     FilePath="{Binding FilePathA}"
+                                     Title="{Binding TitleA}"
+                                     Meta="{Binding MetaA}"
+                                     ScrollRatioChanged="OnScrollRatioChanged"/>
+            </Grid>
+
+            <!-- Divider -->
+            <Grid Grid.Column="1" Width="4">
+                <Border Background="{DynamicResource BorderGlowDim}" HorizontalAlignment="Center" Width="1"/>
+                <GridSplitter HorizontalAlignment="Center"
+                              Width="4"
+                              Background="{DynamicResource BorderSubtle}"
+                              Cursor="SizeWE"
+                              ShowsPreview="False">
+                    <GridSplitter.Style>
+                        <Style TargetType="GridSplitter">
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource TextAccent}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </GridSplitter.Style>
+                </GridSplitter>
+            </Grid>
+
+            <!-- Base pane -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0"
+                        Background="{DynamicResource BgToolbar}"
+                        BorderBrush="{DynamicResource BorderGlowDim}"
+                        BorderThickness="0,1,0,0"
+                        Padding="8,4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal">
+                            <CheckBox IsChecked="{Binding EditMergedEnabled}"
+                                      IsEnabled="{Binding CanEditMerged}"
+                                      Content="edit"
+                                      FontSize="11"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding TitleBase}"
+                                       Foreground="{DynamicResource TextAccent}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Consolas"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="1"
+                                   Text="{Binding MetaBase}"
+                                   Foreground="{DynamicResource TextDim}"
+                                   FontSize="11"
+                                   FontFamily="Consolas"
+                                   Margin="0,1,0,0"/>
+                    </Grid>
+                </Border>
+                <ctrl:FastDiffViewer x:Name="ViewerBase"
+                                     Grid.Row="1"
+                                     Margin="4,0,4,4"
+                                     Lines="{Binding LinesBase}"
+                                     FilePath="{Binding FilePathBase}"
+                                     Title="{Binding TitleBase}"
+                                     Meta="{Binding MetaBase}"
+                                     ScrollRatioChanged="OnScrollRatioChanged"/>
+                <TextBox x:Name="BaseEditor"
+                         Grid.Row="1"
+                         Margin="4,0,4,4"
+                         Visibility="Collapsed"
+                         AcceptsReturn="True"
+                         AcceptsTab="True"
+                         TextWrapping="NoWrap"
+                         HorizontalScrollBarVisibility="Auto"
+                         VerticalScrollBarVisibility="Auto"
+                         BorderThickness="0"
+                         Background="{DynamicResource BgDeep}"
+                         Foreground="{DynamicResource TextPrimary}"
+                         CaretBrush="{DynamicResource TextAccent}"
+                         FontFamily="Consolas"
+                         FontSize="13"
+                         Text="{Binding MergedEditorText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </Grid>
+
+            <!-- Divider -->
+            <Grid Grid.Column="3" Width="4">
+                <Border Background="{DynamicResource BorderGlowDim}" HorizontalAlignment="Center" Width="1"/>
+                <GridSplitter HorizontalAlignment="Center"
+                              Width="4"
+                              Background="{DynamicResource BorderSubtle}"
+                              Cursor="SizeWE"
+                              ShowsPreview="False">
+                    <GridSplitter.Style>
+                        <Style TargetType="GridSplitter">
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource TextAccent}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </GridSplitter.Style>
+                </GridSplitter>
+            </Grid>
+
+            <!-- File B pane -->
+            <Grid Grid.Column="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0"
+                        Background="{DynamicResource BgToolbar}"
+                        BorderBrush="{DynamicResource BorderGlowDim}"
+                        BorderThickness="0,1,0,0"
+                        Padding="8,4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="{Binding TitleB}"
+                                   Foreground="{DynamicResource MergeChangeBBorder}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   FontFamily="Consolas"/>
+                        <TextBlock Grid.Row="1"
+                                   Text="{Binding MetaB}"
+                                   Foreground="{DynamicResource TextDim}"
+                                   FontSize="11"
+                                   FontFamily="Consolas"
+                                   Margin="0,1,0,0"/>
+                    </Grid>
+                </Border>
+                <ctrl:FastDiffViewer x:Name="ViewerB"
+                                     Grid.Row="1"
+                                     Margin="0,0,4,4"
+                                     Lines="{Binding LinesB}"
+                                     FilePath="{Binding FilePathB}"
+                                     Title="{Binding TitleB}"
+                                     Meta="{Binding MetaB}"
+                                     ScrollRatioChanged="OnScrollRatioChanged"/>
+            </Grid>
+        </Grid>
+
+        <!-- ===== STATUS BAR ===== -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlowDim}"
+                BorderThickness="0,1,0,0"
+                Height="28">
+            <TextBlock Text="{Binding StatusInfo}"
+                       Foreground="{DynamicResource TextSecondary}"
+                       FontSize="11"
+                       FontFamily="Consolas"
+                       VerticalAlignment="Center"
+                       Margin="10,0"/>
+        </Border>
+    </Grid>
+</Window>

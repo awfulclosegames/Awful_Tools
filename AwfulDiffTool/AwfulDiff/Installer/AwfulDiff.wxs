@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Id="ActionLizard.AwfulDiff" Name="AwfulDiff" Manufacturer="ActionLizard" Version="1.0.0" UpgradeCode="EF079EA1-B4BA-4655-BA27-4D7B0A739D50">
+    <!-- Embed the cabinet so the MSI is a single self-contained file. -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Link the WixUI_InstallDir browse control to our install folder, or the
+         Install Folder page fails with error 2819 (unlinked dialog property). -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <Feature Id="Main" Title="AwfulDiff" Description="Text file comparator." Level="1">
+      <ComponentRef Id="AppExecutable" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <!-- License text -->
+    <WixVariable Id="WixUILicenseRtf" Value=".\License\License.rtf" />
+
+	  <!-- Program Files\AwfulDiff\AwfulDiff.exe -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="AwfulDiff">
+        <Component Id="AppExecutable" Bitness="always64">
+          <File Source="..\bin\Release\net9.0-windows\win-x64\publish\AwfulDiff.exe" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Start menu shortcut -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Bitness="always64" Guid="{7A9C2E14-5B3D-4F68-9E0A-C4D8B1F2A3E5}">
+        <!-- HKCU key as KeyPath: per-user start menu components must own an HKCU registry key. -->
+        <RegistryKey Root="HKCU" Key="Software\ActionLizard\AwfulDiff">
+          <RegistryValue Name="StartMenu" Type="string" Value="installed" KeyPath="yes" />
+        </RegistryKey>
+        <Shortcut Id="StartMenuLink" Name="AwfulDiff" Target="[INSTALLFOLDER]AwfulDiff.exe" WorkingDirectory="INSTALLFOLDER" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- Standard install wizard (welcome / install folder / progress / finish). -->
+    <UI>
+      <ui:WixUI Id="WixUI_InstallDir" />
+    </UI>
+  </Package>
+</Wix>
+

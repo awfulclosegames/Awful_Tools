@@ -1,0 +1,728 @@
+<!-- No AllowsTransparency: the chrome is square-cornered with an opaque background, and
+     transparent windows maximize over the full monitor (under the taskbar) instead of the
+     work area. -->
+<Window x:Class="AwfulDiff.MainWindow"
+        x:Name="MainWindowRoot"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="clr-namespace:AwfulDiff.Controls"
+        xmlns:vm="clr-namespace:AwfulDiff.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="AwfulDiff // Text File Comparator"
+        Width="1400"
+        Height="850"
+        MinWidth="800"
+        MinHeight="500"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource BgDeep}"
+        Foreground="{DynamicResource TextPrimary}"
+        FontFamily="Consolas, JetBrains Mono, Monaco, monospace"
+        FontSize="13">
+
+    <!-- WindowChrome gives the borderless window proper resize hit-areas on all edges and
+         corners (without it, WPF only allows grabbing the bottom-right corner). CaptionHeight
+         is 0 because the custom title bar handles its own drag/double-click logic. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="5"
+                      CornerRadius="0"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Title bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Toolbar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Main content -->
+            <RowDefinition Height="*"/>
+            <!-- Inspector splitter -->
+            <RowDefinition Height="Auto"/>
+            <!-- Hex inspector panel -->
+            <RowDefinition x:Name="InspectorRow" Height="0"/>
+            <!-- Status bar -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Outer glow frame -->
+        <Border BorderBrush="{DynamicResource BorderGlowDim}" BorderThickness="1"/>
+
+        <!-- ===== CUSTOM TITLE BAR ===== -->
+        <Border x:Name="TitleBar"
+                Grid.Row="0"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlow}"
+                BorderThickness="0,0,0,1"
+                Height="32"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                MouseLeftButtonUp="TitleBar_MouseLeftButtonUp"
+                MouseMove="TitleBar_MouseMove">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Glow line at bottom edge -->
+                <Border Opacity="0.3" Background="{DynamicResource BorderGlow}" Height="1" VerticalAlignment="Bottom"/>
+
+                <!-- Left: App branding -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="◈"
+                               Foreground="{DynamicResource TextAccent}"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Margin="8,0,4,0"/>
+                    <TextBlock Text="AwfulDiff"
+                               Foreground="{DynamicResource TextAccent}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,4,0"/>
+                    <!-- App version — set from the assembly version in code-behind (csproj <Version>). -->
+                    <TextBlock x:Name="TxtVersion"
+                               Foreground="{DynamicResource TextDim}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding TitleSubtitle}"
+                               Foreground="{DynamicResource TextDim}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Margin="0,0,4,0"/>
+                </StackPanel>
+
+                <!-- Center: File info -->
+                <TextBlock Grid.Column="1"
+                           Text="{Binding TitleFileInfo}"
+                           Foreground="{DynamicResource TextDim}"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+
+                <!-- Right: Window controls. IsHitTestVisibleInChrome keeps these clickable —
+                     otherwise the top/right resize bands would swallow presses on them. -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Stretch"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="BtnMinimize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="_"
+                            Click="BtnMinimize_Click"/>
+                    <Button x:Name="BtnMaximize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]"
+                            Click="BtnMaximize_Click"/>
+                    <Button x:Name="BtnRestore"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]/"
+                            Visibility="Collapsed"
+                            Click="BtnRestore_Click"/>
+                    <Button x:Name="BtnClose"
+                            Style="{DynamicResource WindowControlCloseButton}"
+                            Content="x"
+                            Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== TOOLBAR (bound to view model) ===== -->
+        <ctrl:DiffToolbar x:Name="DiffToolbar" Grid.Row="1"/>
+
+        <!-- ===== MAIN CONTENT ===== -->
+        <Grid Grid.Row="2" x:Name="ContentArea" Background="{DynamicResource BgDeep}">
+
+            <!-- Side-by-side layout (default) -->
+            <Grid x:Name="LayoutSideBySide">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left pane -->
+                <Grid Grid.Column="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource BgToolbar}"
+                            BorderBrush="{DynamicResource BorderGlowDim}"
+                            BorderThickness="0,1,0,0"
+                            Padding="8,4">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0"
+                                       Text="{Binding LeftTitle}"
+                                       Foreground="{DynamicResource TextAccent}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Consolas"/>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding LeftMeta}"
+                                       Foreground="{DynamicResource TextDim}"
+                                       FontSize="11"
+                                       FontFamily="Consolas"
+                                       Margin="0,1,0,0"/>
+                        </Grid>
+                    </Border>
+                    <ctrl:FastDiffViewer x:Name="LeftViewer"
+                                         Grid.Row="1"
+                                         Margin="4,0,0,4"
+                                         Lines="{Binding FileALines}"
+                                         FilePath="{Binding LeftFilePath}"
+                                         Title="{Binding LeftTitle}"
+                                         Meta="{Binding LeftMeta}"
+                                         ShowNoDifferences="{Binding LeftShowNoDifferences}"
+                                         SyncScrollRatio="{Binding SyncScrollRatioLeft, Mode=TwoWay}"
+                                         PendingSyncLine="{Binding PendingSyncLineA}"
+                                         SyncPointLines="{Binding SyncPointLinesA}"
+                                         ScrollRatioChanged="OnScrollRatioChanged"
+                                         HorizontalScrollRatioChanged="OnHorizontalScrollRatioChanged"/>
+                </Grid>
+
+                <!-- Divider -->
+                <Grid Grid.Column="1" Width="4">
+                    <Border Background="{DynamicResource BorderGlowDim}" HorizontalAlignment="Center" Width="1"/>
+                    <GridSplitter HorizontalAlignment="Center"
+                                  Width="4"
+                                  Background="{DynamicResource BorderSubtle}"
+                                  Cursor="SizeWE"
+                                  ShowsPreview="False">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource TextAccent}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
+                </Grid>
+
+                <!-- Right pane -->
+                <Grid Grid.Column="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource BgToolbar}"
+                            BorderBrush="{DynamicResource BorderGlowDim}"
+                            BorderThickness="0,1,0,0"
+                            Padding="8,4">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                <CheckBox IsChecked="{Binding EditRightEnabled}"
+                                          IsEnabled="{Binding CanEditRight}"
+                                          Content="edit"
+                                          FontSize="11"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,6,0"/>
+                                <!-- Direct hex entry: shown only when "edit" is on in hex mode
+                                     (UpdateEditorVisibility). Enter = replace selection / insert
+                                     at EOF; Esc = clear. -->
+                                <TextBlock x:Name="HexEntryLabelSbs"
+                                           Text="hex:"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           FontSize="11"
+                                           FontFamily="Consolas"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,4,0"
+                                           Visibility="Collapsed"/>
+                                <TextBox x:Name="HexEntrySbs"
+                                         Width="150"
+                                         Height="22"
+                                         Padding="4,0"
+                                         Background="{DynamicResource BgSurface}"
+                                         Foreground="{DynamicResource TextPrimary}"
+                                         BorderBrush="{DynamicResource BorderGlowDim}"
+                                         CaretBrush="{DynamicResource TextAccent}"
+                                         FontFamily="Consolas"
+                                         FontSize="11"
+                                         VerticalAlignment="Center"
+                                         Visibility="Collapsed"
+                                         KeyDown="HexEntry_KeyDown"
+                                         Text="{Binding HexEntryText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="{Binding RightTitle}"
+                                           Foreground="{DynamicResource TextAccent}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           FontFamily="Consolas"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding RightMeta}"
+                                       Foreground="{DynamicResource TextDim}"
+                                       FontSize="11"
+                                       FontFamily="Consolas"
+                                       Margin="0,1,0,0"/>
+                        </Grid>
+                    </Border>
+                    <ctrl:FastDiffViewer x:Name="RightViewer"
+                                         Grid.Row="1"
+                                         Margin="0,0,4,4"
+                                         Lines="{Binding FileBLines}"
+                                         FilePath="{Binding RightFilePath}"
+                                         Title="{Binding RightTitle}"
+                                         Meta="{Binding RightMeta}"
+                                         ShowNoDifferences="{Binding RightShowNoDifferences}"
+                                         SyncScrollRatio="{Binding SyncScrollRatioRight, Mode=TwoWay}"
+                                         PendingSyncLine="{Binding PendingSyncLineB}"
+                                         SyncPointLines="{Binding SyncPointLinesB}"
+                                         ScrollRatioChanged="OnScrollRatioChanged"
+                                         HorizontalScrollRatioChanged="OnHorizontalScrollRatioChanged"/>
+                    <TextBox x:Name="RightEditorSbs"
+                             Grid.Row="1"
+                             Margin="0,0,4,4"
+                             Visibility="Collapsed"
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             TextWrapping="NoWrap"
+                             HorizontalScrollBarVisibility="Auto"
+                             VerticalScrollBarVisibility="Auto"
+                             BorderThickness="0"
+                             Background="{DynamicResource BgDeep}"
+                             Foreground="{DynamicResource TextPrimary}"
+                             CaretBrush="{DynamicResource TextAccent}"
+                             FontFamily="Consolas"
+                             FontSize="13"
+                             Text="{Binding RightEditorText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+            </Grid>
+
+            <!-- Top-bottom layout -->
+            <Grid x:Name="LayoutTopBottom"
+                  Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Top pane -->
+                <Grid Grid.Row="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource BgToolbar}"
+                            BorderBrush="{DynamicResource BorderGlowDim}"
+                            BorderThickness="0,1,0,0"
+                            Padding="8,4">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0"
+                                       Text="{Binding LeftTitle}"
+                                       Foreground="{DynamicResource TextAccent}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Consolas"/>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding LeftMeta}"
+                                       Foreground="{DynamicResource TextDim}"
+                                       FontSize="11"
+                                       FontFamily="Consolas"
+                                       Margin="0,1,0,0"/>
+                        </Grid>
+                    </Border>
+                    <ctrl:FastDiffViewer x:Name="TopViewer"
+                                         Grid.Row="1"
+                                         Margin="4,0,4,0"
+                                         Lines="{Binding FileALines}"
+                                         FilePath="{Binding LeftFilePath}"
+                                         Title="{Binding LeftTitle}"
+                                         Meta="{Binding LeftMeta}"
+                                         ShowNoDifferences="{Binding LeftShowNoDifferences}"
+                                         SyncScrollRatio="{Binding SyncScrollRatioLeft, Mode=TwoWay}"
+                                         PendingSyncLine="{Binding PendingSyncLineA}"
+                                         SyncPointLines="{Binding SyncPointLinesA}"
+                                         ScrollRatioChanged="OnScrollRatioChanged"
+                                         HorizontalScrollRatioChanged="OnHorizontalScrollRatioChanged"/>
+                </Grid>
+
+                <!-- Divider -->
+                <Grid Grid.Row="1" Height="4">
+                    <Border Background="{DynamicResource BorderGlowDim}" VerticalAlignment="Center" Height="1"/>
+                    <GridSplitter VerticalAlignment="Center"
+                                  Height="4"
+                                  Background="{DynamicResource BorderSubtle}"
+                                  Cursor="SizeNS"
+                                  ShowsPreview="False">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource TextAccent}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
+                </Grid>
+
+                <!-- Bottom pane -->
+                <Grid Grid.Row="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource BgToolbar}"
+                            BorderBrush="{DynamicResource BorderGlowDim}"
+                            BorderThickness="0,1,0,0"
+                            Padding="8,4">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                <CheckBox IsChecked="{Binding EditRightEnabled}"
+                                          IsEnabled="{Binding CanEditRight}"
+                                          Content="edit"
+                                          FontSize="11"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,6,0"/>
+                                <!-- Direct hex entry (top-bottom layout twin of HexEntrySbs). -->
+                                <TextBlock x:Name="HexEntryLabelTb"
+                                           Text="hex:"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           FontSize="11"
+                                           FontFamily="Consolas"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,4,0"
+                                           Visibility="Collapsed"/>
+                                <TextBox x:Name="HexEntryTb"
+                                         Width="150"
+                                         Height="22"
+                                         Padding="4,0"
+                                         Background="{DynamicResource BgSurface}"
+                                         Foreground="{DynamicResource TextPrimary}"
+                                         BorderBrush="{DynamicResource BorderGlowDim}"
+                                         CaretBrush="{DynamicResource TextAccent}"
+                                         FontFamily="Consolas"
+                                         FontSize="11"
+                                         VerticalAlignment="Center"
+                                         Visibility="Collapsed"
+                                         KeyDown="HexEntry_KeyDown"
+                                         Text="{Binding HexEntryText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="{Binding RightTitle}"
+                                           Foreground="{DynamicResource TextAccent}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           FontFamily="Consolas"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding RightMeta}"
+                                       Foreground="{DynamicResource TextDim}"
+                                       FontSize="11"
+                                       FontFamily="Consolas"
+                                       Margin="0,1,0,0"/>
+                        </Grid>
+                    </Border>
+                    <ctrl:FastDiffViewer x:Name="BottomViewer"
+                                         Grid.Row="1"
+                                         Margin="4,0,4,4"
+                                         Lines="{Binding FileBLines}"
+                                         FilePath="{Binding RightFilePath}"
+                                         Title="{Binding RightTitle}"
+                                         Meta="{Binding RightMeta}"
+                                         ShowNoDifferences="{Binding RightShowNoDifferences}"
+                                         SyncScrollRatio="{Binding SyncScrollRatioRight, Mode=TwoWay}"
+                                         PendingSyncLine="{Binding PendingSyncLineB}"
+                                         SyncPointLines="{Binding SyncPointLinesB}"
+                                         ScrollRatioChanged="OnScrollRatioChanged"
+                                         HorizontalScrollRatioChanged="OnHorizontalScrollRatioChanged"/>
+                    <TextBox x:Name="RightEditorTb"
+                             Grid.Row="1"
+                             Margin="4,0,4,4"
+                             Visibility="Collapsed"
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             TextWrapping="NoWrap"
+                             HorizontalScrollBarVisibility="Auto"
+                             VerticalScrollBarVisibility="Auto"
+                             BorderThickness="0"
+                             Background="{DynamicResource BgDeep}"
+                             Foreground="{DynamicResource TextPrimary}"
+                             CaretBrush="{DynamicResource TextAccent}"
+                             FontFamily="Consolas"
+                             FontSize="13"
+                             Text="{Binding RightEditorText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+            </Grid>
+
+            <!-- Unified (git-style) layout: single panel, +/- glyphs in the gutter.
+                 Deliberately unbound from sync-scroll / sync-point properties — there is
+                 only one viewer here, so nothing to synchronize. -->
+            <Grid x:Name="LayoutUnified"
+                  Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0"
+                        Background="{DynamicResource BgToolbar}"
+                        BorderBrush="{DynamicResource BorderGlowDim}"
+                        BorderThickness="0,1,0,0"
+                        Padding="8,4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal">
+                            <CheckBox IsChecked="{Binding EditRightEnabled}"
+                                      IsEnabled="{Binding CanEditRight}"
+                                      Content="edit"
+                                      FontSize="11"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding UnifiedTitle}"
+                                       Foreground="{DynamicResource TextAccent}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Consolas"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="1"
+                                   Text="{Binding UnifiedMeta}"
+                                   Foreground="{DynamicResource TextDim}"
+                                   FontSize="11"
+                                   FontFamily="Consolas"
+                                   Margin="0,1,0,0"/>
+                    </Grid>
+                </Border>
+                <ctrl:FastDiffViewer x:Name="UnifiedViewer"
+                                     Grid.Row="1"
+                                     Margin="4,0,4,4"
+                                     Lines="{Binding UnifiedLines}"
+                                     FilePath="{Binding UnifiedFilePath}"
+                                     Title="{Binding UnifiedTitle}"
+                                     Meta="{Binding UnifiedMeta}"
+                                     ShowChangeGlyphs="True"
+                                     ShowNoDifferences="{Binding UnifiedShowNoDifferences}"/>
+                <TextBox x:Name="UnifiedEditor"
+                         Grid.Row="1"
+                         Margin="4,0,4,4"
+                         Visibility="Collapsed"
+                         AcceptsReturn="True"
+                         AcceptsTab="True"
+                         TextWrapping="NoWrap"
+                         HorizontalScrollBarVisibility="Auto"
+                         VerticalScrollBarVisibility="Auto"
+                         BorderThickness="0"
+                         Background="{DynamicResource BgDeep}"
+                         Foreground="{DynamicResource TextPrimary}"
+                         CaretBrush="{DynamicResource TextAccent}"
+                         FontFamily="Consolas"
+                         FontSize="13"
+                         Text="{Binding RightEditorText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </Grid>
+
+            <!-- Search bar overlay -->
+            <Canvas x:Name="SearchBarCanvas" Panel.ZIndex="10">
+                <Border x:Name="SearchBarOverlay"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource BgPanel}"
+                        BorderBrush="{DynamicResource BorderGlow}"
+                        BorderThickness="0,0,0,1"
+                        Padding="8,4">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="SearchSideLabel"
+                                   Foreground="{DynamicResource TextAccent}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   FontFamily="Consolas"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                        <TextBlock Text="Find:"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   FontSize="12"
+                                   FontFamily="Consolas"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"/>
+                        <TextBox x:Name="SearchTextBox"
+                                 Width="300"
+                                 Height="24"
+                                 Background="{DynamicResource BgSurface}"
+                                 Foreground="{DynamicResource TextPrimary}"
+                                 BorderBrush="{DynamicResource BorderGlowDim}"
+                                 FontFamily="Consolas"
+                                 FontSize="12"
+                                 Padding="6,2"/>
+                        <TextBlock x:Name="SearchCountLabel"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   FontSize="11"
+                                   FontFamily="Consolas"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0,0,0"/>
+                        <Button x:Name="SearchCloseButton"
+                                Content="x"
+                                Width="24"
+                                Height="24"
+                                Margin="8,0,0,0"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextDim}"
+                                BorderBrush="Transparent"
+                                FontSize="12"
+                                Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource BgPanel}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource DiffRemovedBorder}"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Canvas>
+
+            <!-- Wide grab zone along the bottom edge of the panes: dragging it resizes the hex
+                 inspector. Transparent (still hit-testable) with a SizeNS cursor as the affordance;
+                 visible only in hex mode, mirroring the inspector panel below. -->
+            <Border x:Name="InspectorGrabZone"
+                    VerticalAlignment="Bottom"
+                    Height="10"
+                    Background="Transparent"
+                    Cursor="SizeNS"
+                    Visibility="Collapsed"
+                    MouseLeftButtonDown="InspectorGrab_MouseDown"
+                    MouseMove="InspectorGrab_MouseMove"
+                    MouseLeftButtonUp="InspectorGrab_MouseUp"/>
+        </Grid>
+
+        <!-- ===== INSPECTOR SPLITTER =====
+             A plain Border, not a GridSplitter: the built-in control doesn't respond to drags
+             in this row layout (star + Auto splitter row + pixel), so the resize is driven
+             manually — see InspectorGrab_MouseDown/Move/Up. The wide grab zone at the panes'
+             bottom edge shares the same handlers. -->
+        <Border Grid.Row="3"
+                x:Name="InspectorSplitter"
+                Height="4"
+                Background="{DynamicResource BorderSubtle}"
+                Cursor="SizeNS"
+                Visibility="Collapsed"
+                MouseLeftButtonDown="InspectorGrab_MouseDown"
+                MouseMove="InspectorGrab_MouseMove"
+                MouseLeftButtonUp="InspectorGrab_MouseUp"/>
+
+        <!-- ===== HEX INSPECTOR PANEL ===== -->
+        <Border Grid.Row="4"
+                x:Name="InspectorPanel"
+                Background="{DynamicResource BgSurface}"
+                BorderBrush="{DynamicResource BorderGlow}"
+                BorderThickness="0,1,0,0"
+                Visibility="Collapsed">
+            <ctrl:HexInspector x:Name="HexInspector"/>
+        </Border>
+
+        <!-- ===== STATUS BAR ===== -->
+        <Border Grid.Row="5"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlow}"
+                BorderThickness="0,1,0,0"
+                Height="28">
+            <Grid>
+                <Border Opacity="0.15" Background="{DynamicResource BorderGlow}" Height="1" VerticalAlignment="Top"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding StatusLeft}"
+                               Foreground="{DynamicResource TextSecondary}"
+                               FontFamily="Consolas"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="8,0"/>
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding StatusRight}"
+                               Foreground="{DynamicResource TextSecondary}"
+                               FontFamily="Consolas"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="8,0"/>
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding StatusInfo}"
+                               Foreground="{DynamicResource TextSecondary}"
+                               FontFamily="Consolas"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="8,0"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ===== PROGRESS OVERLAY ===== -->
+        <Border x:Name="ProgressOverlay"
+                Grid.Row="0"
+                Grid.RowSpan="6"
+                Panel.ZIndex="99"
+                Background="{DynamicResource BgDeep}"
+                Padding="24,16"
+                Visibility="{Binding IsComputing, Converter={StaticResource BoolToVis}}">
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center">
+                <TextBlock Text="{Binding ProgressText}"
+                           Foreground="{DynamicResource TextPrimary}"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,8"/>
+                <ProgressBar Width="300"
+                             Height="6"
+                             Minimum="0"
+                             Maximum="100"
+                             Value="{Binding ProgressValue, Mode=OneWay}"
+                             Foreground="{DynamicResource TextAccent}"
+                             Background="{DynamicResource BgSurface}"
+                             BorderBrush="{DynamicResource BorderGlowDim}"/>
+                <!-- Cancel: appears after 1 s of computation (hex Per-Byte only — the text
+                     engine has no cancellation token, so ShowCancelButton stays false there) -->
+                <Button Content="✕ Cancel"
+                        Style="{DynamicResource ToolbarButtonStyle}"
+                        Command="{Binding CancelComputationCommand}"
+                        Visibility="{Binding ShowCancelButton, Converter={StaticResource BoolToVis}}"
+                        HorizontalAlignment="Center"
+                        Margin="0,12,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

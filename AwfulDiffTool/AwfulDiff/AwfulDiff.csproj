@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- FolderBrowserDialog for the directory-diff window's Browse buttons (framework reference, no packages).
+         The global usings WinForms would otherwise inject collide with WPF types project-wide, so they
+         are removed below — System.Windows.Forms is referenced fully qualified where needed. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- App version — flows into the exe's assembly/file version metadata and is shown in the
+         main window title bar (MainWindow reads it from the assembly at startup). -->
+    <Version>1.0.0</Version>
+    <!-- Keep the product version clean ("1.0.0") instead of the SDK appending +<git commit>. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- App icon (Explorer / taskbar / Alt-Tab). Windows use WindowStyle="None" custom chrome,
+         so this is the only place the icon is declared — no per-window Icon needed. -->
+    <ApplicationIcon>AwfulDiff.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Drop the implicit global usings UseWindowsForms would add — they make WPF types ambiguous
+         (Brush, Size, Color, CheckBox, IDataObject, MouseEventArgs, ...) across the whole project. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The user manual ships inside the exe so the Help window works from any install location. -->
+    <EmbeddedResource Include="Documentation\UserManual.md" />
+  </ItemGroup>
+
+</Project>

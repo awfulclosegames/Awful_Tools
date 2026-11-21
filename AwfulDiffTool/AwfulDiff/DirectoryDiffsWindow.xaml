@@ -1,0 +1,308 @@
+<!-- No AllowsTransparency: transparent windows maximize over the full monitor (under the
+     taskbar) instead of the work area. -->
+<Window x:Class="AwfulDiff.DirectoryDiffsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:srv="clr-namespace:AwfulDiff.Services"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="AwfulDiff // Directory Diff"
+        Width="1000"
+        Height="700"
+        MinWidth="700"
+        MinHeight="450"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        AllowDrop="True"
+        DragEnter="Window_DragEnter"
+        DragOver="Window_DragOver"
+        PreviewDrop="Window_PreviewDrop"
+        Background="{DynamicResource BgDeep}"
+        Foreground="{DynamicResource TextPrimary}"
+        FontFamily="Consolas, JetBrains Mono, Monaco, monospace"
+        FontSize="13">
+
+    <!-- WindowChrome gives the borderless window proper resize hit-areas on all edges and
+         corners (without it, WPF only allows grabbing the bottom-right corner). CaptionHeight
+         is 0 because the custom title bar handles its own drag/double-click logic. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="5"
+                      CornerRadius="0"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Path input boxes (window-local; DynamicResource brushes survive theme swaps) -->
+        <Style x:Key="PathBoxStyle" TargetType="TextBox">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource BgPanel}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Width" Value="280"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Row template: glyph | name | size L | size R | time L | time R -->
+        <HierarchicalDataTemplate x:Key="DirEntryTemplate"
+                                  DataType="{x:Type srv:DirEntry}"
+                                  ItemsSource="{Binding VisibleChildren}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="75"/>
+                    <ColumnDefinition Width="75"/>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="130"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Glyph}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                           ToolTip="{Binding RelativePath}"/>
+                <TextBlock Grid.Column="2" Text="{Binding SizeLeftText}"  Foreground="{DynamicResource TextDim}" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="{Binding SizeRightText}" Foreground="{DynamicResource TextDim}" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="{Binding TimeLeftText}"  Foreground="{DynamicResource TextDim}" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="5" Text="{Binding TimeRightText}" Foreground="{DynamicResource TextDim}" FontSize="11" VerticalAlignment="Center"/>
+            </Grid>
+        </HierarchicalDataTemplate>
+
+        <!-- Row container: colour per status (files by FileEntryStatus, folders by FolderStatus) -->
+        <Style x:Key="DirTreeItemStyle" TargetType="TreeViewItem">
+            <!-- Expansion lives on the model (DirEntry.IsExpanded, default true) so expand/collapse-all
+                 can flip whole subtrees by data walk. PropertyChanged is required: style-setter bindings
+                 never fire the default LostFocus trigger, so manual expander clicks would not sync back. -->
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding FileStatus}" Value="{x:Static srv:FileEntryStatus.Identical}">
+                    <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FileStatus}" Value="{x:Static srv:FileEntryStatus.Different}">
+                    <Setter Property="Foreground" Value="{DynamicResource DiffModifiedBorder}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FileStatus}" Value="{x:Static srv:FileEntryStatus.OnlyInLeft}">
+                    <Setter Property="Foreground" Value="{DynamicResource DiffRemovedBorder}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FileStatus}" Value="{x:Static srv:FileEntryStatus.OnlyInRight}">
+                    <Setter Property="Foreground" Value="{DynamicResource DiffAddedBorder}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FolderStatus}" Value="{x:Static srv:FolderStatus.NoDifferences}">
+                    <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FolderStatus}" Value="{x:Static srv:FolderStatus.HasDifferences}">
+                    <Setter Property="Foreground" Value="{DynamicResource TextAccent}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FolderStatus}" Value="{x:Static srv:FolderStatus.OnlyInLeft}">
+                    <Setter Property="Foreground" Value="{DynamicResource DiffRemovedBorder}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FolderStatus}" Value="{x:Static srv:FolderStatus.OnlyInRight}">
+                    <Setter Property="Foreground" Value="{DynamicResource DiffAddedBorder}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Title bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Toolbar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Tree -->
+            <RowDefinition Height="*"/>
+            <!-- Status bar -->
+            <RowDefinition Height="28"/>
+        </Grid.RowDefinitions>
+
+        <!-- Outer glow frame -->
+        <Border BorderBrush="{DynamicResource BorderGlowDim}" BorderThickness="1"/>
+
+        <!-- ===== CUSTOM TITLE BAR (same chrome as ThreeWayMergeWindow) ===== -->
+        <Border x:Name="TitleBar"
+                Grid.Row="0"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlow}"
+                BorderThickness="0,0,0,1"
+                Height="32"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                MouseLeftButtonUp="TitleBar_MouseLeftButtonUp"
+                MouseMove="TitleBar_MouseMove">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Glow line at bottom edge -->
+                <Border Opacity="0.3" Background="{DynamicResource BorderGlow}" Height="1" VerticalAlignment="Bottom"/>
+
+                <!-- Left: App branding -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="◈"
+                               Foreground="{DynamicResource TextAccent}"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Margin="8,0,4,0"/>
+                    <TextBlock Text="AwfulDiff"
+                               Foreground="{DynamicResource TextAccent}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="Directory Diff"
+                               Foreground="{DynamicResource TextDim}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Margin="0,0,4,0"/>
+                </StackPanel>
+
+                <!-- Right: Window controls. IsHitTestVisibleInChrome keeps these clickable —
+                     otherwise the top/right resize bands would swallow presses on them. -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Stretch"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="BtnMinimize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="_"
+                            Click="BtnMinimize_Click"/>
+                    <Button x:Name="BtnMaximize"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]"
+                            Click="BtnMaximize_Click"/>
+                    <Button x:Name="BtnRestore"
+                            Style="{DynamicResource WindowControlButton}"
+                            Content="[]/"
+                            Visibility="Collapsed"
+                            Click="BtnRestore_Click"/>
+                    <Button x:Name="BtnClose"
+                            Style="{DynamicResource WindowControlCloseButton}"
+                            Content="x"
+                            Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== TOOLBAR ===== -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlowDim}"
+                BorderThickness="0,0,0,1">
+            <DockPanel Margin="4,0" LastChildFill="False">
+
+                <!-- Right: toggles + compare -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox Content="Show unchanged files"
+                              Style="{DynamicResource ToggleCheckBoxStyle}"
+                              IsChecked="{Binding ShowUnchangedFiles}"/>
+                    <CheckBox Content="Show unchanged folders"
+                              Style="{DynamicResource ToggleCheckBoxStyle}"
+                              IsChecked="{Binding ShowUnchangedDirs}"/>
+                    <Button Content="[⇄] Swap"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            Click="Swap_Click"
+                            ToolTip="Swap the left and right folders (re-compares)"/>
+                    <Button Content="[▣] Compare"
+                            Style="{DynamicResource ToolbarButtonStyle}"
+                            Command="{Binding CompareCommand}"/>
+                </StackPanel>
+
+                <!-- Left: folder A -->
+                <TextBlock DockPanel.Dock="Left" Text="◄" Foreground="{DynamicResource DiffRemovedBorder}"
+                           FontSize="12" VerticalAlignment="Center" Margin="4,0,6,0"/>
+                <!-- Drop zone: dropping a folder here fills the LEFT path. The TextBox is made a
+                     valid drop target too — WPF only raises drag events over elements that accept
+                     drops, so without it a drop on the path box never reaches the zone at all.
+                     Routing to this side happens in Window_PreviewDrop via the drop point. -->
+                <Border x:Name="LeftDropZone" DockPanel.Dock="Left" AllowDrop="True">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBox Style="{StaticResource PathBoxStyle}"
+                                 AllowDrop="True"
+                                 Text="{Binding LeftPath, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="{Binding LeftPath}"/>
+                        <Button Content="Browse..."
+                                Style="{DynamicResource ToolbarButtonStyle}"
+                                Click="BrowseLeft_Click"
+                                ToolTip="Choose the left (A) folder"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Middle: vs -->
+                <TextBlock DockPanel.Dock="Left" Text="vs" Foreground="{DynamicResource TextDim}"
+                           FontSize="12" VerticalAlignment="Center" Margin="8,0"/>
+
+                <!-- Right: folder B -->
+                <!-- Drop zone: dropping a folder here fills the RIGHT path (see left zone above) -->
+                <Border x:Name="RightDropZone" DockPanel.Dock="Left" AllowDrop="True">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBox Style="{StaticResource PathBoxStyle}"
+                                 AllowDrop="True"
+                                 Text="{Binding RightPath, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="{Binding RightPath}"/>
+                        <Button Content="Browse..."
+                                Style="{DynamicResource ToolbarButtonStyle}"
+                                Click="BrowseRight_Click"
+                                ToolTip="Choose the right (B) folder"/>
+                    </StackPanel>
+                </Border>
+                <TextBlock DockPanel.Dock="Left" Text="►" Foreground="{DynamicResource DiffAddedBorder}"
+                           FontSize="12" VerticalAlignment="Center" Margin="6,0,4,0"/>
+            </DockPanel>
+        </Border>
+
+        <!-- ===== TREE ===== -->
+        <Grid Grid.Row="2" Background="{DynamicResource BgDeep}">
+            <TreeView x:Name="Tree"
+                      Margin="4,4"
+                      Background="Transparent"
+                      BorderThickness="0"
+                      ItemsSource="{Binding RootItems}"
+                      ItemContainerStyle="{StaticResource DirTreeItemStyle}"
+                      ItemTemplate="{StaticResource DirEntryTemplate}"
+                      MouseDoubleClick="Tree_MouseDoubleClick"/>
+
+            <!-- Shown only after a completed compare with nothing visible -->
+            <TextBlock Text="No differences found — the directories are identical"
+                       Foreground="{DynamicResource TextDim}"
+                       FontSize="14"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Visibility="{Binding IsResultEmpty, Converter={StaticResource BoolToVis}}"/>
+        </Grid>
+
+        <!-- ===== STATUS BAR ===== -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource BgToolbar}"
+                BorderBrush="{DynamicResource BorderGlowDim}"
+                BorderThickness="0,1,0,0">
+            <DockPanel Margin="10,0">
+                <TextBlock DockPanel.Dock="Right"
+                           Text="{Binding WarningCount, StringFormat=⚠ {0} warning(s)}"
+                           Foreground="{DynamicResource DiffModifiedBorder}"
+                           FontSize="11"
+                           VerticalAlignment="Center"
+                           Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
+                    <TextBlock.ToolTip>
+                        <ToolTip>
+                            <TextBlock Text="{Binding WarningsText}" MaxWidth="500" TextWrapping="Wrap"/>
+                        </ToolTip>
+                    </TextBlock.ToolTip>
+                </TextBlock>
+                <TextBlock Text="{Binding StatusText}"
+                           Foreground="{DynamicResource TextSecondary}"
+                           FontSize="11"
+                           FontFamily="Consolas"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
